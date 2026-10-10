@@ -468,7 +468,9 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.15;
-    container.replaceChildren(renderer.domElement);
+    
+    // Prevent wiping out React's children (like the loading spinner) which causes the removeChild crash
+    container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
     // 4. Orbit Controls
@@ -757,6 +759,9 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
       controls.dispose();
       renderer.dispose();
       if (audioContextRef.current) void audioContextRef.current.close();
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     };
   }, [autoSpin, lightTheme, timeBounds.startLabel, timeBounds.endLabel]);
 
