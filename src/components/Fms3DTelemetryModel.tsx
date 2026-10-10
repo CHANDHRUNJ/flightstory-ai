@@ -16,7 +16,14 @@ import {
   RotateCcw,
   Sliders,
   X,
-  Zap
+  Zap,
+  Sun,
+  Moon,
+  Volume2,
+  VolumeX,
+  Ruler,
+  Waves,
+  Radio
 } from 'lucide-react';
 
 export type NodeId = 'NODE_A' | 'NODE_B' | 'NODE_C';
@@ -94,6 +101,13 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
   const [heightScale, setHeightScale] = useState<number>(1.0);
   const [pointSize, setPointSize] = useState<number>(1.0);
   const [autoSpin, setAutoSpin] = useState<boolean>(false);
+  const [lightTheme, setLightTheme] = useState<boolean>(true);
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(false);
+  const [caliperMode, setCaliperMode] = useState<boolean>(false);
+  const [caliperFirst, setCaliperFirst] = useState<TelemetryPoint | null>(null);
+  const [caliperSecond, setCaliperSecond] = useState<TelemetryPoint | null>(null);
+  const [acousticEnvelope, setAcousticEnvelope] = useState<number | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
   // Interactive selection state
@@ -438,8 +452,8 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
 
     // 1. Scene
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x070b14); // Deep aerospace navy
-    scene.fog = new THREE.FogExp2(0x070b14, 0.0009);
+    scene.background = new THREE.Color(lightTheme ? 0xf1f5f9 : 0x070b14);
+    scene.fog = new THREE.FogExp2(lightTheme ? 0xe2e8f0 : 0x070b14, lightTheme ? 0.0004 : 0.0009);
     sceneRef.current = scene;
 
     // 2. Camera
@@ -468,14 +482,14 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
     controlsRef.current = controls;
 
     // 5. Lights
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.65);
+    const ambientLight = new THREE.AmbientLight(0xffffff, lightTheme ? 1.4 : 0.65);
     scene.add(ambientLight);
 
-    const dirLight = new THREE.DirectionalLight(0xa5f3fc, 0.85);
+    const dirLight = new THREE.DirectionalLight(lightTheme ? 0xffffff : 0xa5f3fc, lightTheme ? 1.25 : 0.85);
     dirLight.position.set(200, 400, 200);
     scene.add(dirLight);
 
-    const redFaultLight = new THREE.PointLight(0xf43f5e, 1.8, 300);
+    const redFaultLight = new THREE.PointLight(0xf43f5e, lightTheme ? 1.2 : 1.8, 300);
     redFaultLight.position.set(-180, 80, 85);
     scene.add(redFaultLight);
 
@@ -495,7 +509,7 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
       const planeMat = new THREE.MeshBasicMaterial({
         color: cfg.colorHex,
         transparent: true,
-        opacity: 0.055,
+        opacity: lightTheme ? 0.18 : 0.055,
         side: THREE.DoubleSide
       });
       const planeMesh = new THREE.Mesh(planeGeom, planeMat);
@@ -508,7 +522,7 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
       const lineMat = new THREE.LineBasicMaterial({
         color: cfg.colorHex,
         transparent: true,
-        opacity: 0.45
+        opacity: lightTheme ? 0.85 : 0.45
       });
       const wireframe = new THREE.LineSegments(edges, lineMat);
       wireframe.rotation.x = -Math.PI / 2;
@@ -533,8 +547,29 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
 
     scene.add(lanesGroup);
 
+    // Subtle technical floor grid for depth orientation
+    const floorGrid = new THREE.GridHelper(560, 28, lightTheme ? 0x94a3b8 : 0x334155, lightTheme ? 0xcfdbe7 : 0x1e293b);
+    floorGrid.position.y = -0.5;
+    (floorGrid.material as THREE.Material).transparent = true;
+    (floorGrid.material as THREE.Material).opacity = lightTheme ? 0.6 : 0.4;
+    scene.add(floorGrid);
+
+    // Translucent moving Time-Slice Analysis Scanner Plane
+    const scannerMat = new THREE.MeshBasicMaterial({
+      color: lightTheme ? 0x0284c7 : 0x38bdf8,
+      transparent: true,
+      opacity: lightTheme ? 0.16 : 0.22,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    });
+    const scannerMesh = new THREE.Mesh(new THREE.PlaneGeometry(32, 230), scannerMat);
+    scannerMesh.name = 'time-scanner-plane';
+    scannerMesh.rotation.x = -Math.PI / 2;
+    scannerMesh.position.set(-250 + scrubProgress * 500, 0.4, 0);
+    scene.add(scannerMesh);
+
     // 7. Time Axis Labels (CanvasTexture Sprites)
-    const createTextSprite = (text: string, color = '#94a3b8', fontSize = 28, isBold = false) => {
+    const createTextSprite = (text: string, color = lightTheme ? '#1e293b' : '#94a3b8', fontSize = 28, isBold = false) => {
       const canvas = document.createElement('canvas');
       canvas.width = 384;
       canvas.height = 128;
@@ -557,25 +592,25 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
     };
 
     // Label: 09:00 at start
-    const label09 = createTextSprite('09:00', '#cbd5e1', 32, true);
+    const label09 = createTextSprite(timeBounds.startLabel, lightTheme ? '#0f172a' : '#cbd5e1', 32, true);
     label09.position.set(-250, 4, 135);
     scene.add(label09);
 
     // Label: 14:00 at end
-    const label14 = createTextSprite('14:00', '#cbd5e1', 32, true);
+    const label14 = createTextSprite(timeBounds.endLabel, lightTheme ? '#0f172a' : '#cbd5e1', 32, true);
     label14.position.set(245, 4, 135);
     scene.add(label14);
 
     // Node Track Labels
-    const labelNodeA = createTextSprite('NODE A', '#06b6d4', 28, true);
+    const labelNodeA = createTextSprite('NODE A (MASTER)', lightTheme ? '#0284c7' : '#06b6d4', 28, true);
     labelNodeA.position.set(-275, 4, LANE_Z_COORDS.NODE_A);
     scene.add(labelNodeA);
 
-    const labelNodeB = createTextSprite('NODE B STANDBY', '#0d9488', 26, true);
+    const labelNodeB = createTextSprite('NODE B (STANDBY)', lightTheme ? '#0d9488' : '#0d9488', 26, true);
     labelNodeB.position.set(-275, 4, LANE_Z_COORDS.NODE_B);
     scene.add(labelNodeB);
 
-    const labelNodeC = createTextSprite('NODE C AUXILIARY', '#8b5cf6', 26, true);
+    const labelNodeC = createTextSprite('NODE C (AUXILIARY)', lightTheme ? '#7c3aed' : '#8b5cf6', 26, true);
     labelNodeC.position.set(-275, 4, LANE_Z_COORDS.NODE_C);
     scene.add(labelNodeC);
 
@@ -650,6 +685,17 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
         const pt = topHit.userData.point as TelemetryPoint | undefined;
         if (pt) {
           setSelectedPoint(pt);
+          if (caliperMode) {
+            if (!caliperFirst) {
+              setCaliperFirst(pt);
+              setCaliperSecond(null);
+            } else {
+              setCaliperSecond(pt);
+            }
+          }
+          if (soundEnabled) {
+            playAcousticSignature(pt);
+          }
         }
       }
     };
@@ -674,6 +720,12 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
           controlsRef.current.autoRotate = false;
         }
         controlsRef.current.update();
+      }
+
+      // Update Time-Slice Scanner position along timeline
+      const scanner = sceneRef.current?.getObjectByName('time-scanner-plane');
+      if (scanner) {
+        scanner.position.x = -250 + scrubProgress * 500;
       }
 
       // Animate pulse particles along arcs
@@ -704,8 +756,9 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
       container.removeEventListener('pointerup', handlePointerUp);
       controls.dispose();
       renderer.dispose();
+      if (audioContextRef.current) void audioContextRef.current.close();
     };
-  }, [autoSpin]);
+  }, [autoSpin, lightTheme, timeBounds.startLabel, timeBounds.endLabel]);
 
   // Update Points and Arcs Meshes in 3D scene
   useEffect(() => {
@@ -741,24 +794,24 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
     // Shared sphere geometry
     const baseSphereGeom = new THREE.SphereGeometry(1, 12, 12);
 
-    // Pre-create materials for performance
+    // Pre-create materials with crystal-clear contrast for the active theme
     const matInfo = new THREE.MeshStandardMaterial({
-      color: 0x38bdf8,
-      emissive: 0x0284c7,
-      emissiveIntensity: 0.6,
-      roughness: 0.2
+      color: lightTheme ? 0x0284c7 : 0x38bdf8,
+      emissive: lightTheme ? 0x0369a1 : 0x0284c7,
+      emissiveIntensity: lightTheme ? 0.35 : 0.6,
+      roughness: 0.25
     });
     const matWarning = new THREE.MeshStandardMaterial({
-      color: 0xfbbf24,
-      emissive: 0xd97706,
-      emissiveIntensity: 0.7,
-      roughness: 0.2
+      color: lightTheme ? 0xd97706 : 0xfbbf24,
+      emissive: lightTheme ? 0xb45309 : 0xd97706,
+      emissiveIntensity: lightTheme ? 0.4 : 0.7,
+      roughness: 0.25
     });
     const matCritical = new THREE.MeshStandardMaterial({
-      color: 0xf43f5e,
-      emissive: 0xe11d48,
-      emissiveIntensity: 0.9,
-      roughness: 0.1
+      color: lightTheme ? 0xe11d48 : 0xf43f5e,
+      emissive: lightTheme ? 0xbe123c : 0xe11d48,
+      emissiveIntensity: lightTheme ? 0.55 : 0.9,
+      roughness: 0.15
     });
 
     // Populate Point Meshes
@@ -781,7 +834,66 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
 
       pointsGroup.add(mesh);
       pointMeshesRef.current.set(pt.id, mesh);
+
+      if (pt.isFault) {
+        // High-contrast pulsing target ring on the lane floor
+        const targetRing = new THREE.Mesh(
+          new THREE.RingGeometry(Math.max(r * 1.8, 6), Math.max(r * 2.2, 7.5), 32),
+          new THREE.MeshBasicMaterial({ color: 0xe11d48, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+        );
+        targetRing.rotation.x = Math.PI / 2;
+        targetRing.position.set(pt.x, 0.4, pt.z);
+        pointsGroup.add(targetRing);
+      }
     });
+
+    // Draw 3D Caliper Measurement Line if two points are selected
+    if (caliperFirst && caliperSecond) {
+      const p1 = new THREE.Vector3(caliperFirst.x, caliperFirst.y * heightScale + 4, caliperFirst.z);
+      const p2 = new THREE.Vector3(caliperSecond.x, caliperSecond.y * heightScale + 4, caliperSecond.z);
+      const caliperGeom = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+      const caliperLine = new THREE.Line(
+        caliperGeom,
+        new THREE.LineDashedMaterial({
+          color: lightTheme ? 0x0f172a : 0x38bdf8,
+          dashSize: 3,
+          gapSize: 2
+        })
+      );
+      caliperLine.computeLineDistances();
+      pointsGroup.add(caliperLine);
+
+      // Caliper midpoint badge
+      const mid = p1.clone().add(p2).multiplyScalar(0.5);
+      const cCanvas = document.createElement('canvas');
+      cCanvas.width = 440;
+      cCanvas.height = 96;
+      const cCtx = cCanvas.getContext('2d');
+      const dMs = Math.abs(caliperSecond.timeMs - caliperFirst.timeMs);
+      if (cCtx) {
+        cCtx.fillStyle = lightTheme ? 'rgba(255, 255, 255, 0.95)' : 'rgba(15, 23, 42, 0.95)';
+        cCtx.strokeStyle = lightTheme ? '#0284c7' : '#38bdf8';
+        cCtx.lineWidth = 3;
+        cCtx.beginPath();
+        cCtx.roundRect(4, 4, 432, 88, 16);
+        cCtx.fill();
+        cCtx.stroke();
+
+        cCtx.font = 'bold 26px ui-monospace, monospace';
+        cCtx.fillStyle = lightTheme ? '#0f172a' : '#f8fafc';
+        cCtx.textAlign = 'center';
+        cCtx.fillText(`Δt: ${formatDelta(dMs)}`, 220, 42);
+
+        cCtx.font = '20px ui-monospace, monospace';
+        cCtx.fillStyle = lightTheme ? '#64748b' : '#94a3b8';
+        cCtx.fillText(`${caliperFirst.node_id} ➔ ${caliperSecond.node_id}`, 220, 72);
+      }
+      const cTex = new THREE.CanvasTexture(cCanvas);
+      const cSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: cTex, transparent: true, depthTest: false }));
+      cSprite.scale.set(65, 14, 1);
+      cSprite.position.copy(mid).add(new THREE.Vector3(0, 14, 0));
+      pointsGroup.add(cSprite);
+    }
 
     // Create 3D Fault Callout Pin (Billboard) matching screenshot
     if (primaryFault && primaryFault.timeNormalized <= scrubProgress + 0.005) {
@@ -791,8 +903,8 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         // Transparent dark rounded badge
-        ctx.fillStyle = 'rgba(7, 11, 20, 0.88)';
-        ctx.strokeStyle = '#f43f5e';
+        ctx.fillStyle = lightTheme ? 'rgba(255, 255, 255, 0.96)' : 'rgba(7, 11, 20, 0.88)';
+        ctx.strokeStyle = '#e11d48';
         ctx.lineWidth = 4;
         ctx.beginPath();
         ctx.roundRect(8, 8, canvas.width - 16, canvas.height - 16, 20);
@@ -807,18 +919,19 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
 
         // FAULT text
         ctx.font = 'bold 30px ui-monospace, monospace';
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = lightTheme ? '#0f172a' : '#ffffff';
         ctx.fillText('FAULT', 72, 54);
 
         // Code & Time
         ctx.font = 'bold 32px ui-monospace, monospace';
-        ctx.fillStyle = '#fecdd3';
-        ctx.fillText('6025 09:09:54', 42, 102);
+        ctx.fillStyle = lightTheme ? '#9f1239' : '#fecdd3';
+        const tStr = primaryFault.timestamp.length >= 19 ? primaryFault.timestamp.slice(11, 19) : primaryFault.timestamp;
+        ctx.fillText(`${primaryFault.faultCode || 'FAULT 6025'} ${tStr}`, 42, 102);
 
         // Node
         ctx.font = '24px ui-monospace, monospace';
-        ctx.fillStyle = '#c084fc';
-        ctx.fillText('• NODE C AUXILIARY', 42, 138);
+        ctx.fillStyle = lightTheme ? '#6d28d9' : '#c084fc';
+        ctx.fillText(`• ${primaryFault.node_id}`, 42, 138);
       }
 
       const texture = new THREE.CanvasTexture(canvas);
@@ -882,7 +995,46 @@ export const Fms3DTelemetryModel: React.FC<Fms3DTelemetryModelProps> = () => {
         t: Math.random()
       });
     });
-  }, [points, arcs, primaryFault, scrubProgress, heightScale, pointSize]);
+  }, [points, arcs, primaryFault, scrubProgress, heightScale, pointSize, lightTheme, caliperFirst, caliperSecond]);
+
+  // Acoustic sonification for multi-sensory telemetry touch
+  const playAcousticSignature = useCallback((pt: TelemetryPoint) => {
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!audioContextRef.current) audioContextRef.current = new AudioCtx();
+      const ctx = audioContextRef.current;
+      if (ctx.state === 'suspended') void ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const baseFreq = pt.isFault || pt.severity === 'Critical' ? 1046.5 : pt.severity === 'Warning' ? 784 : 523.25;
+      osc.type = pt.isFault ? 'sawtooth' : 'sine';
+      osc.frequency.setValueAtTime(baseFreq, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(baseFreq * 1.2, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.12, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.22);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.23);
+
+      setAcousticEnvelope(pt.severity === 'Critical' ? 3 : pt.severity === 'Warning' ? 2 : 1);
+      window.setTimeout(() => setAcousticEnvelope(null), 300);
+    } catch {
+      // Audio autoplay policy fallback
+    }
+  }, []);
+
+  const formatDelta = (deltaMs: number) => {
+    if (!Number.isFinite(deltaMs)) return 'unknown';
+    if (deltaMs < 1000) return `${Math.round(deltaMs)} ms`;
+    if (deltaMs < 60000) return `${(deltaMs / 1000).toFixed(1)} s`;
+    return `${(deltaMs / 60000).toFixed(1)} min`;
+  };
 
   // Camera Perspective Presets
   const setPerspective = (preset: 'Iso 3D' | 'Top Radar' | 'Node C' | 'Side') => {
@@ -1012,11 +1164,45 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
           </div>
         </div>
 
-        {/* View Actions */}
+        {/* View Actions: Theme Toggle, Audio Sonification, Calipers, Fullscreen */}
         <div className="flex items-center space-x-2 text-xs font-mono pointer-events-auto">
+          {/* High-Visibility Light / Dark Theme Switcher */}
+          <button
+            onClick={() => setLightTheme(t => !t)}
+            className={`px-3 py-1.5 rounded-lg border font-semibold flex items-center gap-1.5 transition-all shadow-xs ${
+              lightTheme
+                ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100'
+                : 'bg-slate-900 border-slate-700 text-slate-200 hover:bg-slate-800'
+            }`}
+            title="Toggle between High-Visibility Light Theme and Dark Cockpit"
+          >
+            {lightTheme ? <Moon className="w-4 h-4 text-indigo-600" /> : <Sun className="w-4 h-4 text-amber-400" />}
+            <span>{lightTheme ? 'Dark Mode' : 'Light Mode'}</span>
+          </button>
+
+          {/* Web Audio Sonification Radar Toggle */}
+          <button
+            onClick={() => setSoundEnabled(s => !s)}
+            className={`p-1.5 rounded-lg border transition-all ${
+              soundEnabled
+                ? 'bg-cyan-100 border-cyan-400 text-cyan-800 shadow-xs'
+                : lightTheme
+                ? 'bg-white border-slate-300 text-slate-500 hover:bg-slate-100'
+                : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+            }`}
+            title={soundEnabled ? 'Acoustic Telemetry Feedback: ON' : 'Acoustic Telemetry Feedback: OFF'}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+          </button>
+
+          {/* Fullscreen Toggle */}
           <button
             onClick={() => setIsFullscreen(f => !f)}
-            className="p-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-300 transition-colors"
+            className={`p-1.5 rounded-lg border transition-colors ${
+              lightTheme
+                ? 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                : 'bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-slate-300'
+            }`}
             title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen 3D Cockpit'}
           >
             {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -1024,13 +1210,38 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
         </div>
       </div>
 
+      {/* Unique Real-Time Scanner Badge */}
+      <div className={`absolute left-5 top-[86px] z-20 px-3 py-1.5 rounded-lg border backdrop-blur-md pointer-events-none flex items-center gap-2 text-[10px] font-mono uppercase tracking-widest ${
+        lightTheme ? 'bg-white/90 border-slate-200 text-slate-700 shadow-xs' : 'bg-slate-900/85 border-slate-700 text-slate-300'
+      }`}>
+        <Waves className={`w-3.5 h-3.5 animate-pulse ${lightTheme ? 'text-cyan-600' : 'text-cyan-400'}`} />
+        <span>Time-Slice Scanner:</span>
+        <strong className={lightTheme ? 'text-cyan-700 font-bold' : 'text-cyan-300 font-bold'}>{currentScrubTimeLabel}</strong>
+      </div>
+
+      {/* Acoustic Audio Cue Indicator */}
+      {acousticEnvelope && (
+        <div className={`absolute right-5 top-20 z-30 px-3 py-1.5 rounded-lg border flex items-center gap-2 font-mono text-[10px] shadow-lg animate-bounce ${
+          acousticEnvelope === 3 ? 'bg-rose-100 border-rose-300 text-rose-800' :
+          acousticEnvelope === 2 ? 'bg-amber-100 border-amber-300 text-amber-800' :
+          'bg-cyan-100 border-cyan-300 text-cyan-800'
+        }`}>
+          <Radio className="w-3.5 h-3.5 animate-pulse" />
+          <span>Acoustic Avionics Chime</span>
+        </div>
+      )}
+
       {/* Main 3D Canvas Mount */}
       <div
         ref={mountRef}
-        className="relative w-full h-[540px] md:h-[620px] bg-slate-950 outline-none select-none cursor-grab active:cursor-grabbing"
+        className={`relative w-full h-[540px] md:h-[620px] outline-none select-none cursor-grab active:cursor-grabbing ${
+      lightTheme ? 'bg-slate-100' : 'bg-slate-950'
+    }`}
       >
         {loading && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-950/80 z-30 font-mono text-xs text-cyan-400">
+          <div className={`absolute inset-0 flex items-center justify-center z-30 font-mono text-xs ${
+      lightTheme ? 'bg-white/85 text-cyan-700' : 'bg-slate-950/80 text-cyan-400'
+    }`}>
             <span className="animate-spin mr-2">⚙</span> Synchronizing 3D aerospace multi-node telemetry model...
           </div>
         )}
@@ -1038,7 +1249,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
 
       {/* Axis Marker Bottom-Left Watermark (Matching Screenshot: TIME × SEVERITY × NODE) */}
       <div className="absolute bottom-[116px] left-5 z-20 pointer-events-none select-none">
-        <span className="text-[11px] font-mono tracking-widest text-slate-400 font-bold uppercase drop-shadow-md">
+        <span className={`text-[11px] font-mono tracking-widest font-bold uppercase drop-shadow-sm ${
+      lightTheme ? 'text-slate-600' : 'text-slate-400'
+    }`}>
           TIME &times; SEVERITY &times; NODE
         </span>
       </div>
@@ -1049,7 +1262,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
           className="absolute z-30 pointer-events-none transform -translate-x-1/2 -translate-y-full mb-3"
           style={{ left: hoverPosition.x, top: hoverPosition.y }}
         >
-          <div className="bg-slate-900/95 border border-slate-700/80 backdrop-blur-md rounded-lg p-2.5 shadow-xl text-xs font-mono max-w-xs space-y-1">
+          <div className={`backdrop-blur-md rounded-lg p-2.5 shadow-xl text-xs font-mono max-w-xs space-y-1 border ${
+            lightTheme ? 'bg-white/95 border-slate-200 text-slate-800 shadow-slate-200/50' : 'bg-slate-900/95 border-slate-700/80 text-slate-100'
+          }`}>
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1">
               <span className="font-bold" style={{ color: LANE_COLORS[hoveredPoint.node_id].css }}>
                 {LANE_COLORS[hoveredPoint.node_id].label}
@@ -1076,8 +1291,39 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
         </div>
       )}
 
+      {/* Caliper Measurement HUD Strip */}
+      {caliperFirst && (
+        <div className={`px-5 py-2 border-t flex flex-wrap items-center justify-between gap-3 text-xs font-mono z-20 ${
+          lightTheme ? 'bg-amber-50/90 border-amber-200 text-amber-900' : 'bg-amber-950/70 border-amber-800 text-amber-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <Ruler className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>Point A: <strong>{caliperFirst.timestamp.slice(11, 19)}</strong> ({caliperFirst.node_id})</span>
+            {caliperSecond ? (
+              <>
+                <span className="font-bold">➔</span>
+                <span>Point B: <strong>{caliperSecond.timestamp.slice(11, 19)}</strong> ({caliperSecond.node_id})</span>
+                <span className="font-bold ml-2 px-2 py-0.5 rounded bg-amber-200/80 text-amber-900 border border-amber-300">
+                  Δt = {formatDelta(Math.abs(caliperSecond.timeMs - caliperFirst.timeMs))}
+                </span>
+              </>
+            ) : (
+              <span className="italic text-amber-700 animate-pulse ml-2">Click any second point in 3D to measure exact separation...</span>
+            )}
+          </div>
+          <button
+            onClick={() => { setCaliperFirst(null); setCaliperSecond(null); setCaliperMode(false); }}
+            className="px-2 py-0.5 rounded text-[11px] bg-amber-200 hover:bg-amber-300 text-amber-900 font-semibold"
+          >
+            Clear Measurement
+          </button>
+        </div>
+      )}
+
       {/* BOTTOM CONTROLS BAR 1: PLAYBACK SCRUBBER (Matching Screenshot) */}
-      <div className="bg-slate-900/95 border-t border-slate-800 px-5 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono z-20">
+      <div className={`px-5 py-2.5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs font-mono z-20 border-t transition-colors ${
+      lightTheme ? 'bg-white border-slate-200 text-slate-700' : 'bg-slate-900/95 border-slate-800 text-slate-200'
+    }`}>
         <div className="flex items-center space-x-2">
           {/* Play / Pause Toggle Button */}
           <button
@@ -1148,7 +1394,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
       </div>
 
       {/* BOTTOM CONTROLS BAR 2: 3D ADJUSTABLE CONTROLS (Matching Screenshot) */}
-      <div className="bg-slate-950 border-t border-slate-800/80 px-5 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs font-mono z-20">
+      <div className={`px-5 py-2.5 flex flex-wrap items-center justify-between gap-4 text-xs font-mono z-20 border-t transition-colors ${
+      lightTheme ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-slate-950 border-slate-800/80 text-slate-300'
+    }`}>
         
         {/* Perspective Presets */}
         <div className="flex items-center space-x-2">
@@ -1203,13 +1451,35 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
             />
           </div>
 
+          {/* 3D Caliper Delta Measurement Tool */}
+          <button
+            onClick={() => {
+              setCaliperMode(m => !m);
+              if (caliperMode) {
+                setCaliperFirst(null);
+                setCaliperSecond(null);
+              }
+            }}
+            className={`px-3 py-1 rounded-md border flex items-center gap-1.5 font-semibold transition-all ${
+              caliperMode
+                ? 'bg-amber-100 border-amber-400 text-amber-900 font-bold shadow-xs'
+                : lightTheme
+                ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-100'
+                : 'bg-slate-900 border-slate-700 text-slate-300 hover:bg-slate-800'
+            }`}
+            title="Measure exact time and cross-node separation between any two points"
+          >
+            <Ruler className="w-3.5 h-3.5 text-amber-600" />
+            <span>{caliperMode ? (caliperFirst ? 'Select 2nd Point' : 'Select 1st Point') : 'Measure Calipers'}</span>
+          </button>
+
           {/* Auto-Spin Toggle Button */}
           <button
             onClick={() => setAutoSpin(s => !s)}
             className={`px-3 py-1 rounded-md border transition-colors ${
               autoSpin
-                ? 'bg-cyan-950 text-cyan-300 border-cyan-700 font-bold'
-                : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
+                ? lightTheme ? 'bg-cyan-100 text-cyan-800 border-cyan-400 font-bold' : 'bg-cyan-950 text-cyan-300 border-cyan-700 font-bold'
+                : lightTheme ? 'bg-white text-slate-700 border-slate-300 hover:bg-slate-100' : 'bg-slate-900 text-slate-400 border-slate-800 hover:bg-slate-800'
             }`}
           >
             Auto-Spin {autoSpin ? 'ON' : 'OFF'}
@@ -1219,10 +1489,14 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
 
       {/* RIGHT-SIDE RESPONSIVE EVIDENCE INVESTIGATION DRAWER */}
       {selectedPoint && (
-        <div className="absolute top-0 right-0 bottom-0 w-full sm:w-[440px] z-40 bg-slate-900/98 border-l border-slate-700/80 shadow-2xl flex flex-col backdrop-blur-xl animate-in slide-in-from-right duration-200">
+        <div className={`absolute top-0 right-0 bottom-0 w-full sm:w-[440px] z-40 border-l shadow-2xl flex flex-col backdrop-blur-xl animate-in slide-in-from-right duration-200 ${
+          lightTheme ? 'bg-white/98 border-slate-300 text-slate-800' : 'bg-slate-900/98 border-slate-700/80 text-slate-100'
+        }`}>
           
           {/* Drawer Header */}
-          <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/70">
+          <div className={`p-4 border-b flex items-center justify-between ${
+      lightTheme ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/70 border-slate-800'
+    }`}>
             <div className="flex items-center space-x-2">
               <span className={`p-1.5 rounded-lg ${
                 selectedPoint.severity === 'Critical' ? 'bg-rose-950 text-rose-400 border border-rose-800' :
@@ -1232,7 +1506,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
                 {selectedPoint.severity === 'Critical' ? <AlertTriangle className="w-4 h-4" /> : <Info className="w-4 h-4" />}
               </span>
               <div>
-                <h3 className="text-sm font-bold text-white font-sans flex items-center gap-2">
+                <h3 className={`text-sm font-bold font-sans flex items-center gap-2 ${
+      lightTheme ? 'text-slate-900' : 'text-white'
+    }`}>
                   <span>Point Evidence Details</span>
                   {selectedPoint.faultCode && (
                     <span className="px-1.5 py-0.2 rounded bg-rose-900 text-rose-200 text-[10px] font-mono font-bold">
@@ -1257,7 +1533,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
           {/* Drawer Body */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 text-xs font-mono">
             {/* Primary Telemetry Attributes */}
-            <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
+            <div className={`rounded-lg p-3 space-y-2 border ${
+      lightTheme ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+    }`}>
               <div className="grid grid-cols-2 gap-2 text-[11px]">
                 <div>
                   <span className="text-slate-500 block text-[10px] uppercase">Channel / Node</span>
@@ -1286,13 +1564,17 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
             {/* Event Message / Raw Telemetry */}
             <div className="space-y-1.5">
               <span className="text-slate-400 text-[10px] uppercase tracking-wider font-bold">Observed Telemetry Message</span>
-              <div className="bg-slate-950 border border-slate-800 rounded-lg p-3 text-slate-200 leading-relaxed font-mono">
+              <div className={`rounded-lg p-3 leading-relaxed font-mono border ${
+      lightTheme ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-slate-950 border-slate-800 text-slate-200'
+    }`}>
                 {selectedPoint.message}
               </div>
             </div>
 
             {/* 3D Coordinate Placement */}
-            <div className="bg-slate-950/60 border border-slate-800/80 rounded-lg p-2.5 text-[11px] text-slate-400 space-y-1">
+            <div className={`rounded-lg p-2.5 text-[11px] space-y-1 border ${
+      lightTheme ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-slate-950/60 border-slate-800/80 text-slate-400'
+    }`}>
               <span className="text-cyan-400 font-bold block text-[10px] uppercase">3D Spatial Plot Coordinates</span>
               <div className="grid grid-cols-3 gap-2 text-center pt-1 font-mono">
                 <div className="bg-slate-900 p-1.5 rounded border border-slate-800">
@@ -1358,7 +1640,9 @@ Original Parameters: ${JSON.stringify(point.originalFields || {}, null, 2)}`;
           </div>
 
           {/* Drawer Footer Actions */}
-          <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
+          <div className={`p-4 border-t flex items-center justify-between ${
+      lightTheme ? 'bg-slate-50 border-slate-200' : 'bg-slate-950/80 border-slate-800'
+    }`}>
             <button
               onClick={() => handleCopyEvidence(selectedPoint)}
               className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex items-center gap-1.5 text-xs font-mono transition-colors"
