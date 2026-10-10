@@ -5,6 +5,7 @@ import type { SummaryData, IncidentCandidate, EventRecord } from '../services/ap
 import { InvestigationBreadcrumbs } from '../components/InvestigationBreadcrumbs';
 import { HowWeKnowInspector } from '../components/HowWeKnowInspector';
 import { DashboardMetrics } from '../components/DashboardMetrics';
+import { FmsVisualization } from '../components/FmsVisualization';
 import {
   Plane, 
   Clock, 
@@ -411,6 +412,10 @@ export const FlightOverviewPage: React.FC = () => {
         )}
       </div>
 
+      {/* Interactive Hero FMS Visualization Suite */}
+      <FmsVisualization />
+
+      {/* Legacy Metrics */}
       <DashboardMetrics
         searchQuery={debouncedSearch}
         selectedCategory={selectedCategory}

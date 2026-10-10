@@ -5,7 +5,8 @@ import {
   AlertTriangle, 
   Network, 
   Database,
-  Activity
+  Activity,
+  BarChart3
 } from 'lucide-react';
 import { apiService } from '../../services/apiService';
 import type { HealthData } from '../../services/apiService';
@@ -35,6 +36,12 @@ const Sidebar = () => {
       level: 'Level 1',
       path: '/overview', 
       icon: Plane 
+    },
+    {
+      name: 'Visualization',
+      level: 'Analytics',
+      path: '/visualization',
+      icon: BarChart3
     },
     { 
       name: 'Faults & Events', 
