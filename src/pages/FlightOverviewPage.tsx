@@ -6,7 +6,9 @@ import { InvestigationBreadcrumbs } from '../components/InvestigationBreadcrumbs
 import { HowWeKnowInspector } from '../components/HowWeKnowInspector';
 import { DashboardMetrics } from '../components/DashboardMetrics';
 import { FmsVisualization } from '../components/FmsVisualization';
+import { Fms3DTelemetryModel } from '../components/Fms3DTelemetryModel';
 import {
+  Box,
   Plane, 
   Clock, 
   AlertTriangle, 
@@ -63,6 +65,7 @@ export const FlightOverviewPage: React.FC = () => {
 
   // Expanded Event Detail Rows (accordion within timeline)
   const [expandedEventRows, setExpandedEventRows] = useState<Record<string, boolean>>({});
+  const [overviewViewMode, setOverviewViewMode] = useState<'3d' | '2d'>('3d');
 
   // Filter States inside Flight Overview
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -412,8 +415,57 @@ export const FlightOverviewPage: React.FC = () => {
         )}
       </div>
 
-      {/* Interactive Hero FMS Visualization Suite */}
-      <FmsVisualization />
+      {/* Interactive Hero FMS Visualization Suite: 3D Spatial Model or 2D Timeline */}
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white border border-slate-200 rounded-xl p-3 shadow-xs">
+          <div className="flex items-center space-x-2 font-mono text-xs">
+            <span className="p-1.5 rounded-lg bg-cyan-50 text-cyan-700 border border-cyan-200">
+              <Box className="w-4 h-4" />
+            </span>
+            <div>
+              <span className="font-bold text-slate-900 block">FMS Observability Display Mode</span>
+              <span className="text-[11px] text-slate-500">Switch between 3D spatial multi-node telemetry and 2D synchronized timeline</span>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 font-mono text-xs">
+            <button
+              onClick={() => setOverviewViewMode('3d')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold transition-all ${
+                overviewViewMode === '3d'
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <Box className="w-3.5 h-3.5" />
+              <span>3D Spatial Model</span>
+            </button>
+            <button
+              onClick={() => setOverviewViewMode('2d')}
+              className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-semibold transition-all ${
+                overviewViewMode === '2d'
+                  ? 'bg-cyan-600 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              <span>2D Synchronized Timeline</span>
+            </button>
+            <button
+              onClick={() => navigate('/visualization')}
+              className="px-3 py-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 flex items-center gap-1 font-sans transition-colors"
+            >
+              <span>Full Cockpit</span>
+              <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
+            </button>
+          </div>
+        </div>
+
+        {overviewViewMode === '3d' ? (
+          <Fms3DTelemetryModel />
+        ) : (
+          <FmsVisualization />
+        )}
+      </div>
 
       {/* Legacy Metrics */}
       <DashboardMetrics
