@@ -4,7 +4,7 @@ import FlightOverviewPage from './pages/FlightOverviewPage';
 import FaultsAndEventsPage from './pages/FaultsAndEventsPage';
 import OperationContextPage from './pages/OperationContextPage';
 import LogImporterPage from './pages/LogImporterPage';
-import FmsVisualization from './components/FmsVisualization';
+import VisualizationPage from './pages/VisualizationPage';
 
 function App() {
   return (
@@ -13,7 +13,7 @@ function App() {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Navigate to="/overview" replace />} />
           <Route path="overview" element={<FlightOverviewPage />} />
-          <Route path="visualization" element={<FmsVisualization />} />
+          <Route path="visualization" element={<VisualizationPage />} />
           <Route path="faults" element={<FaultsAndEventsPage />} />
           <Route path="context" element={<OperationContextPage />} />
           <Route path="context/:id" element={<OperationContextPage />} />
